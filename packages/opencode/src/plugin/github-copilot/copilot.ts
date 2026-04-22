@@ -65,10 +65,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         }
 
         const auth = ctx.auth
+        const configHeaders =
+          (provider.options as { headers?: Record<string, string> } | undefined)?.headers ?? {}
 
         return CopilotModels.get(
           base(auth.enterpriseUrl),
           {
+            ...configHeaders,
             Authorization: `Bearer ${auth.refresh}`,
             "User-Agent": `opencode/${InstallationVersion}`,
           },
