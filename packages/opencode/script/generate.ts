@@ -8,7 +8,48 @@ const dir = path.resolve(__dirname, "..")
 process.chdir(dir)
 
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
-export const modelsData = process.env.MODELS_DEV_API_JSON
-  ? await Bun.file(process.env.MODELS_DEV_API_JSON).text()
-  : await fetch(`${modelsUrl}/api.json`).then((x) => x.text())
+const baselinePath = path.join(dir, "src/provider/models-snapshot.baseline.json")
+const offline =
+  process.env.OPENCODE_MODELS_OFFLINE === "1" ||
+  process.env.OPENCODE_MODELS_OFFLINE === "true" ||
+  process.env.OPENCODE_DISABLE_MODELS_FETCH === "1" ||
+  process.env.OPENCODE_DISABLE_MODELS_FETCH === "true"
+
+// CES fork: try in order — explicit JSON file, then live fetch (unless offline),
+// then a checked-in baseline snapshot. We never want the build to fail because
+// models.dev is unreachable; the runtime gracefully degrades anyway because
+// OPENCODE_DISABLE_MODELS_FETCH defaults to true and the baked-in snapshot
+// (OPENCODE_MODELS_DEV) is used instead.
+async function fetchSnapshot(): Promise<string> {
+  if (process.env.MODELS_DEV_API_JSON) {
+    return await Bun.file(process.env.MODELS_DEV_API_JSON).text()
+  }
+  if (!offline) {
+    try {
+      const res = await fetch(`${modelsUrl}/api.json`, { signal: AbortSignal.timeout(15_000) })
+      if (res.ok) return await res.text()
+      console.warn(`Failed to fetch models.dev (HTTP ${res.status}); falling back to baseline snapshot`)
+    } catch (err) {
+      console.warn(`Failed to fetch models.dev (${(err as Error).message}); falling back to baseline snapshot`)
+    }
+  }
+  const baseline = Bun.file(baselinePath)
+  if (await baseline.exists()) return await baseline.text()
+  console.warn(`No baseline snapshot at ${baselinePath}; emitting empty catalogue`)
+  return "{}"
+}
+
+export const modelsData = await fetchSnapshot()
+
+// Persist the freshly fetched payload as the new baseline so subsequent offline
+// builds in the same checkout stay current. Skipped when we fell back already
+// (the file content matches what's on disk anyway).
+if (!offline && !process.env.MODELS_DEV_API_JSON && modelsData !== "{}") {
+  try {
+    await Bun.write(baselinePath, modelsData)
+  } catch (err) {
+    console.warn(`Could not update baseline snapshot: ${(err as Error).message}`)
+  }
+}
+
 console.log("Loaded models.dev snapshot")

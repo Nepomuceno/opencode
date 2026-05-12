@@ -1,3 +1,24 @@
+<!--
+================================================================================
+CES fork (Nepomuceno/opencode) — what differs from upstream anomalyco/opencode:
+
+  - Every build is suffixed with `-ces3` in the version string
+    (e.g. `1.14.20-ces3`). Override with env var OPENCODE_CES_SUFFIX.
+  - Auto-update is OFF by default. Re-enable with
+    `OPENCODE_DISABLE_AUTOUPDATE=false` or `autoupdate: true` in config.
+  - Runtime calls to models.dev are OFF by default. The CLI ships with a
+    bundled snapshot of the models catalogue and never reaches the network
+    for it. Re-enable with `OPENCODE_DISABLE_MODELS_FETCH=false`.
+  - Releases are produced by `.github/workflows/release-ces.yml` and only
+    publish CLI binaries to GitHub Releases on this fork. They do NOT push
+    to npm, Homebrew, AUR, Docker, or any other upstream channel.
+  - `.github/workflows/sync-upstream.yml` opens a weekly PR that merges
+    `anomalyco/opencode@dev` so the fork stays close to upstream.
+
+The README below is upstream's.
+================================================================================
+-->
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>

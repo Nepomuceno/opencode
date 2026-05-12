@@ -5,6 +5,14 @@ export function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+// CES fork: explicit opt-out check. Returns true only when the env var is
+// explicitly set to a falsy value ("false"/"0"). Used to invert flags whose
+// default the fork flips on (auto-update, models.dev fetch).
+function falsy(key: string) {
+  const value = process.env[key]?.toLowerCase()
+  return value === "false" || value === "0"
+}
+
 const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 const fff = process.env["OPENCODE_DISABLE_FFF"]
 
@@ -20,13 +28,20 @@ export const Flag = {
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
   OPENCODE_CONFIG: process.env["OPENCODE_CONFIG"],
   OPENCODE_CONFIG_CONTENT: process.env["OPENCODE_CONFIG_CONTENT"],
-  OPENCODE_DISABLE_AUTOUPDATE: truthy("OPENCODE_DISABLE_AUTOUPDATE"),
+  // CES fork: auto-update is OFF by default. Users can opt back in by setting
+  // OPENCODE_DISABLE_AUTOUPDATE=false (or `autoupdate: true` in config).
+  OPENCODE_DISABLE_AUTOUPDATE: !falsy("OPENCODE_DISABLE_AUTOUPDATE"),
   OPENCODE_ALWAYS_NOTIFY_UPDATE: truthy("OPENCODE_ALWAYS_NOTIFY_UPDATE"),
   OPENCODE_DISABLE_PRUNE: truthy("OPENCODE_DISABLE_PRUNE"),
   OPENCODE_DISABLE_TERMINAL_TITLE: truthy("OPENCODE_DISABLE_TERMINAL_TITLE"),
   OPENCODE_SHOW_TTFD: truthy("OPENCODE_SHOW_TTFD"),
   OPENCODE_DISABLE_AUTOCOMPACT: truthy("OPENCODE_DISABLE_AUTOCOMPACT"),
-  OPENCODE_DISABLE_MODELS_FETCH: truthy("OPENCODE_DISABLE_MODELS_FETCH"),
+  // CES fork: models.dev network fetching is OFF by default. The binary ships
+  // with a bundled snapshot of the models catalogue, baked in at build time as
+  // the OPENCODE_MODELS_DEV define (see packages/opencode/script/generate.ts and
+  // packages/core/src/models-dev.ts). To re-enable runtime fetching, set
+  // OPENCODE_DISABLE_MODELS_FETCH=false.
+  OPENCODE_DISABLE_MODELS_FETCH: !falsy("OPENCODE_DISABLE_MODELS_FETCH"),
   OPENCODE_DISABLE_MOUSE: truthy("OPENCODE_DISABLE_MOUSE"),
   OPENCODE_FAKE_VCS: process.env["OPENCODE_FAKE_VCS"],
   OPENCODE_SERVER_PASSWORD: process.env["OPENCODE_SERVER_PASSWORD"],
