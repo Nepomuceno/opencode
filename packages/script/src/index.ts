@@ -31,20 +31,34 @@ const CHANNEL = await (async () => {
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 
+// CES fork: every build appends `-ces3` to the upstream version so consumers
+// can tell a CES build apart from an anomalyco build. Override with
+// OPENCODE_CES_SUFFIX="" to disable, or OPENCODE_CES_SUFFIX="foo" to change.
+const CES_SUFFIX = (() => {
+  const raw = process.env["OPENCODE_CES_SUFFIX"]
+  if (raw === undefined) return "-ces3"
+  if (raw === "") return ""
+  return raw.startsWith("-") ? raw : `-${raw}`
+})()
+
+const ensureCesSuffix = (v: string) => (CES_SUFFIX && !v.endsWith(CES_SUFFIX) ? `${v}${CES_SUFFIX}` : v)
+
 const VERSION = await (async () => {
-  if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
-    .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
-      return res.json()
-    })
-    .then((data: any) => data.version)
-  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
+  if (env.OPENCODE_VERSION) return ensureCesSuffix(env.OPENCODE_VERSION)
+  if (IS_PREVIEW)
+    return ensureCesSuffix(`0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`)
+  // CES fork: read the upstream version from the opencode package.json instead
+  // of hitting the npm registry. The fork doesn't publish to npm and the build
+  // environment may not have outbound network access to registry.npmjs.org.
+  const pkgPath = path.resolve(import.meta.dir, "../../opencode/package.json")
+  const upstreamVersion = (await Bun.file(pkgPath).json()).version as string
+  const [major, minor, patch] = upstreamVersion.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
-  if (t === "major") return `${major + 1}.0.0`
-  if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
+  if (t === "major") return ensureCesSuffix(`${major + 1}.0.0`)
+  if (t === "minor") return ensureCesSuffix(`${major}.${minor + 1}.0`)
+  if (t === "patch") return ensureCesSuffix(`${major}.${minor}.${patch + 1}`)
+  // No explicit bump: keep upstream's version and just tag it as a CES build.
+  return ensureCesSuffix(upstreamVersion)
 })()
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]

@@ -1,0 +1,92 @@
+name: sync-upstream
+
+# Pulls the latest upstream/dev (anomalyco/opencode) into a sync branch and
+# opens a PR. Run weekly or on demand so the CES fork stays close to upstream.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+
+      - name: Configure git
+        run: |
+          git config user.name "ces-sync-bot"
+          git config user.email "ces-sync-bot@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git
+          git fetch upstream dev --tags
+
+      - name: Create sync branch
+        id: branch
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse --short upstream/dev)
+          branch="sync/upstream-${sha}"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "exists=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if already in sync
+        if: steps.branch.outputs.exists == '1'
+        run: echo "Branch ${{ steps.branch.outputs.branch }} already exists; nothing to do."
+
+      - name: Merge upstream/dev into dev
+        if: steps.branch.outputs.exists != '1'
+        id: merge
+        run: |
+          set -euo pipefail
+          git checkout -b "${{ steps.branch.outputs.branch }}" origin/dev
+          if git merge --no-edit upstream/dev; then
+            echo "conflict=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "conflict=1" >> "$GITHUB_OUTPUT"
+            # Keep partial state so the PR shows conflicts for a human to resolve.
+            git add -A
+            git -c user.email=ces-sync-bot@users.noreply.github.com \
+                -c user.name=ces-sync-bot \
+                commit -m "chore: WIP merge upstream/dev (conflicts — please resolve)" || true
+          fi
+
+      - name: Push sync branch
+        if: steps.branch.outputs.exists != '1'
+        run: git push origin "${{ steps.branch.outputs.branch }}"
+
+      - name: Open PR
+        if: steps.branch.outputs.exists != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="chore: sync upstream/dev (${{ steps.branch.outputs.sha }})"
+          body="Automated sync of \`anomalyco/opencode@dev\` (\`${{ steps.branch.outputs.sha }}\`) into this fork's \`dev\` branch."
+          if [ "${{ steps.merge.outputs.conflict }}" = "1" ]; then
+            body="${body}\n\n**Merge conflicts detected.** Resolve manually before merging."
+          fi
+          gh pr create \
+            --base dev \
+            --head "${{ steps.branch.outputs.branch }}" \
+            --title "${title}" \
+            --body "$(printf '%b' "${body}")"
