@@ -32,3 +32,8 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+.cache/
+
+# Local signing credentials
+/ces-artifacts/1.17.9-ces3/certs/difteam-codesign.pfx
+/ces-artifacts/1.17.9-ces3/certs/difteam-pfx-password.txt

@@ -12,7 +12,25 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+// Resolve the node-pty native package for the TARGET platform, not the build
+// host. When cross-building (e.g. Windows installers on an Apple Silicon Mac),
+// set RUST_TARGET (e.g. x86_64-pc-windows-msvc) so the bundle imports the
+// correct prebuilt binding instead of the host's darwin-arm64 one.
+const nodePtyTarget = (() => {
+  const rustTarget = process.env.RUST_TARGET
+  const map: Record<string, { platform: string; arch: string }> = {
+    "x86_64-pc-windows-msvc": { platform: "win32", arch: "x64" },
+    "aarch64-pc-windows-msvc": { platform: "win32", arch: "arm64" },
+    "x86_64-apple-darwin": { platform: "darwin", arch: "x64" },
+    "aarch64-apple-darwin": { platform: "darwin", arch: "arm64" },
+    "x86_64-unknown-linux-gnu": { platform: "linux", arch: "x64" },
+    "aarch64-unknown-linux-gnu": { platform: "linux", arch: "arm64" },
+  }
+  if (rustTarget && map[rustTarget]) return map[rustTarget]
+  return { platform: process.platform, arch: process.arch }
+})()
+
+const nodePtyPkg = `@lydell/node-pty-${nodePtyTarget.platform}-${nodePtyTarget.arch}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
